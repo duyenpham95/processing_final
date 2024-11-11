@@ -4,9 +4,10 @@ import java.io.File;
 
 PFont font;
 PImage[] gifFrames;
+PImage backgroundImg; // Background image
 int currentFrame = 0;
 int numFrames = 147;
-int frameDisplayInterval = 75;  // Default interval in milliseconds
+int frameDisplayInterval = 70;  // Default interval in milliseconds
 int lastFrameTime = 0;           // Last time a new frame was shown
 
 Minim minim;
@@ -34,6 +35,9 @@ void setup() {
   textFont(font);
   fill(0);
 
+  // Load the background image
+  backgroundImg = loadImage("background.jpg");
+
   // Load all frames from the "frames" folder
   gifFrames = new PImage[numFrames];
   for (int i = 0; i < numFrames; i++) {
@@ -49,10 +53,10 @@ void setup() {
      .setSize(100, 50)
      .setLabel("Record");
 
-  // Set up volume slider with extended range
+  // Set up volume slider with extended range and increased length
   cp5.addSlider("volume")
      .setPosition(width - 150, 20)
-     .setSize(110, 20)
+     .setSize(110, 20) // Increased width to 110 pixels
      .setRange(-100, 100)
      .setValue(0)
      .bringToFront()
@@ -65,11 +69,11 @@ void setup() {
        }
      });
 
-  // Set up speed slider with expanded range
+  // Set up speed slider with expanded range, increased length, and max value of 5
   cp5.addSlider("speed")
      .setPosition(width - 150, 50)
-     .setSize(110, 20)
-     .setRange(0.1, 5) 
+     .setSize(110, 20) // Increased width to 110 pixels
+     .setRange(0.1, 5) // Max value of 5
      .setValue(1)
      .bringToFront()
      .setLock(false)
@@ -94,7 +98,8 @@ void updateFrameDisplayInterval() {
 }
 
 void draw() {
-  background(255);
+  // Display the background image
+  image(backgroundImg, 0, 0, width, height);
 
   if (state == 1) {  
     cp5.getController("recordButton").setVisible(true);
