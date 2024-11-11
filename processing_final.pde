@@ -4,21 +4,26 @@ import java.io.File;
 
 PFont font;
 PImage[] gifFrames;
-PImage backgroundImg; // Background image
+PImage backgroundImg;
 int currentFrame = 0;
 int numFrames = 147;
-int frameDisplayInterval = 70;  // Default interval in milliseconds
-int lastFrameTime = 0;           // Last time a new frame was shown
+int frameDisplayInterval = 65;
+int lastFrameTime = 0;
 
 Minim minim;
 AudioInput input;
 AudioRecorder recorder;
 AudioSample sample;
+AudioPlayer player;
+float[] audioDataLeft;
+float[] audioDataRight;
+
 ControlP5 cp5;
 float volumeValue = 0;
 float speedValue = 1;
 
 boolean recording = false;
+boolean dataReady = false; // Flag to check if data is ready for visualization
 int countdown = 2;
 int lastCountdownTime;
 int state = 1;
@@ -26,6 +31,10 @@ String recordedFilePath = "recorded_audio.wav";
 
 int sampleStartTime = 0;
 int playbackInterval = 1000;
+
+// Arrays to store fixed positions and colors for the circles
+PVector[] circlePositions = new PVector[32];
+color[] circleColors = new color[32]; // Array to store colors for each circle
 
 void setup() {
   size(600, 400);
@@ -35,10 +44,8 @@ void setup() {
   textFont(font);
   fill(0);
 
-  // Load the background image
   backgroundImg = loadImage("background.jpg");
 
-  // Load all frames from the "frames" folder
   gifFrames = new PImage[numFrames];
   for (int i = 0; i < numFrames; i++) {
     gifFrames[i] = loadImage("frames/frame_" + i + ".gif");
@@ -53,10 +60,9 @@ void setup() {
      .setSize(100, 50)
      .setLabel("Record");
 
-  // Set up volume slider with extended range and increased length
   cp5.addSlider("volume")
      .setPosition(width - 150, 20)
-     .setSize(110, 20) // Increased width to 110 pixels
+     .setSize(110, 20)
      .setRange(-100, 100)
      .setValue(0)
      .bringToFront()
@@ -69,11 +75,10 @@ void setup() {
        }
      });
 
-  // Set up speed slider with expanded range, increased length, and max value of 5
   cp5.addSlider("speed")
      .setPosition(width - 150, 50)
-     .setSize(110, 20) // Increased width to 110 pixels
-     .setRange(0.1, 5) // Max value of 5
+     .setSize(110, 20)
+     .setRange(0.1, 5)
      .setValue(1)
      .bringToFront()
      .setLock(false)
@@ -83,8 +88,18 @@ void setup() {
          updatePlaybackInterval();
          println("Speed changed to: " + speedValue);
        }
-       updateFrameDisplayInterval();  // Adjust frame interval for GIF playback
+       updateFrameDisplayInterval();
      });
+  
+  // Generate random positions and colors for each circle
+  for (int i = 0; i < circlePositions.length; i++) {
+    float x = random(width);
+    float y = random(height);
+    circlePositions[i] = new PVector(x, y);
+    
+    // Generate and store a random color with opacity 75
+    circleColors[i] = color(random(100, 255), random(100, 255), random(100, 255), 75);
+  }
 }
 
 void updatePlaybackInterval() {
@@ -92,13 +107,11 @@ void updatePlaybackInterval() {
 }
 
 void updateFrameDisplayInterval() {
-  // Adjust frame interval inversely with speedValue
-  int baseInterval = 100; // Base interval in milliseconds for normal speed
-  frameDisplayInterval = (int)(baseInterval / speedValue); // Scale interval based on speed
+  int baseInterval = 65;
+  frameDisplayInterval = (int)(baseInterval / speedValue);
 }
 
 void draw() {
-  // Display the background image
   image(backgroundImg, 0, 0, width, height);
 
   if (state == 1) {  
@@ -123,8 +136,9 @@ void draw() {
     if (countdown <= 0 && recording) {
       println("Recording stopped.");
       stopRecording();
-      delay(500);
-      checkAudioFile();
+      delay(500);  // Extra time for file save completion
+      captureAudioDataDirectly();  // Direct buffer capture
+      dataReady = true;  // Set flag to indicate data is ready
       state = 3;
     }
   } else if (state == 3) {  
@@ -132,9 +146,8 @@ void draw() {
     text("Finished recording", width/2, height/2 - 50);
     cp5.getController("recordButton").setLabel("Next");
   } else if (state == 4) {  
-    // Display the current frame of the GIF with controlled timing
     if (millis() - lastFrameTime >= frameDisplayInterval) {
-      currentFrame = (currentFrame + 1) % numFrames;  // Loop through frames
+      currentFrame = (currentFrame + 1) % numFrames;
       lastFrameTime = millis();
     }
     image(gifFrames[currentFrame], width/2 - gifFrames[currentFrame].width/2, height/2 - gifFrames[currentFrame].height/2);
@@ -149,7 +162,80 @@ void draw() {
 
     cp5.getController("volume").setVisible(true);
     cp5.getController("speed").setVisible(true);
+    
+    // Draw circles only if data is ready
+    if (dataReady) {
+      drawCirclesBasedOnAudioData();
+    }
   }
+
+  
+}
+
+// Direct data capture from input buffers
+void captureAudioDataDirectly() {
+  if (input != null) {
+    int bufferSize = input.bufferSize();
+    println("Buffer size:", bufferSize);
+    
+    audioDataLeft = new float[bufferSize];
+    audioDataRight = new float[bufferSize];
+    
+    for (int i = 0; i < bufferSize; i++) {
+      audioDataLeft[i] = input.left.get(i);  // Access left channel
+    }
+    
+    float[] numericDataFromAudio = calculateSampleData(audioDataLeft);
+    
+    println("Average ----" );
+    for (int i = 0; i < 32; i++) {
+      print(" ", numericDataFromAudio[i]);
+    }
+  } else {
+    println("Error: Audio input not initialized.");
+  }
+}
+
+void drawCirclesBasedOnAudioData() {
+  float[] averagedData = calculateSampleData(audioDataLeft);
+  for (int i = 0; i < averagedData.length; i++) {
+    // Map the averaged values to the range 5 to 50 for the radius
+    float radius = map(averagedData[i], min(averagedData), max(averagedData), 5, 50);
+    
+    // Use fixed positions from circlePositions array
+    float x = circlePositions[i].x;
+    float y = circlePositions[i].y;
+
+    // Use the pre-generated color for each circle
+    fill(circleColors[i]);  // Fixed random color with opacity 75
+    stroke(255, 255, 255, 50);  // White stroke with low opacity for a soft blur effect
+    strokeWeight(6);             // Increase stroke weight for a blur-like appearance
+
+    // Draw the circle
+    ellipse(x, y, radius * 2, radius * 2);  // radius * 2 since ellipse uses diameter
+  }
+}
+
+float[] calculateSampleData(float[] audioDataLeft) {
+  int numBatches = 32;      // Number of batches
+  int batchSize = 16;       // Number of values per batch
+  float[] averagedValues = new float[numBatches]; // Array to store averages
+  
+  // Loop through each batch
+  for (int i = 0; i < numBatches; i++) {
+    float sum = 0;
+    
+    // Calculate the sum of 16 values in the current batch
+    for (int j = 0; j < batchSize; j++) {
+      int index = i * batchSize + j;  // Calculate the correct index
+      sum += audioDataLeft[index];
+    }
+    
+    // Calculate the average for the current batch
+    averagedValues[i] = sum / batchSize;
+  }
+  
+  return averagedValues;  // Return the array of 32 averaged values
 }
 
 void startRecording() {
@@ -158,23 +244,15 @@ void startRecording() {
 }
 
 void stopRecording() {
-  recording = false;
-  recorder.endRecord();
-  recorder.save();
-  
-  delay(1000);
-  checkAudioFile();
+  if (recording) {
+    recording = false;
+    recorder.endRecord();
+    recorder.save();
 
-  sample = minim.loadSample(recordedFilePath, 512);
-}
+    delay(5000);  // Ensure enough time for saving
 
-void checkAudioFile() {
-  File audioFile = new File("./" + dataPath(recordedFilePath));
-  println(recordedFilePath);
-  if (audioFile.exists()) {
-    println("Audio file exists. File size: " + audioFile.length() + " bytes");
-  } else {
-    println("Audio file does not exist. Recording may have failed.");
+    // Load the audio sample for playback
+    sample = minim.loadSample(recordedFilePath, 512);
   }
 }
 
@@ -193,7 +271,7 @@ void recordButton() {
     sample.trigger();
     sample.setGain(volumeValue);
     updatePlaybackInterval();
-    updateFrameDisplayInterval();  // Set initial frame display interval based on speed
+    updateFrameDisplayInterval();
     sampleStartTime = millis();
   }
 }
