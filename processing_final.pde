@@ -1,10 +1,14 @@
 import controlP5.*;
-import gifAnimation.*;
 import ddf.minim.*;
 import java.io.File;
 
 PFont font;
-Gif gifCat;
+PImage[] gifFrames;
+int currentFrame = 0;
+int numFrames = 147;
+int frameDisplayInterval = 75;  // Default interval in milliseconds
+int lastFrameTime = 0;           // Last time a new frame was shown
+
 Minim minim;
 AudioInput input;
 AudioRecorder recorder;
@@ -19,7 +23,6 @@ int lastCountdownTime;
 int state = 1;
 String recordedFilePath = "recorded_audio.wav";
 
-// Variables for manual looping with speed control
 int sampleStartTime = 0;
 int playbackInterval = 1000;
 
@@ -31,14 +34,16 @@ void setup() {
   textFont(font);
   fill(0);
 
-  gifCat = new Gif(this, "cat-dance.gif");
-  gifCat.loop();
+  // Load all frames from the "frames" folder
+  gifFrames = new PImage[numFrames];
+  for (int i = 0; i < numFrames; i++) {
+    gifFrames[i] = loadImage("frames/frame_" + i + ".gif");
+  }
 
   minim = new Minim(this);
   input = minim.getLineIn(Minim.MONO, 512);
   recorder = minim.createRecorder(input, recordedFilePath, true);
 
-  // Set up the "Record" button in the middle of the screen
   cp5.addButton("recordButton")
      .setPosition(width/2 - 50, height/2 - 25)
      .setSize(100, 50)
@@ -47,8 +52,8 @@ void setup() {
   // Set up volume slider with extended range
   cp5.addSlider("volume")
      .setPosition(width - 150, 20)
-     .setSize(100, 20)
-     .setRange(-100, 100) // Increased volume range from -100 to 100 dB
+     .setSize(110, 20)
+     .setRange(-100, 100)
      .setValue(0)
      .bringToFront()
      .setLock(false)
@@ -63,8 +68,8 @@ void setup() {
   // Set up speed slider with expanded range
   cp5.addSlider("speed")
      .setPosition(width - 150, 50)
-     .setSize(100, 20)
-     .setRange(0.1, 3) // Expanded speed range from 0.1 (slow) to 3 (fast)
+     .setSize(110, 20)
+     .setRange(0.1, 5) 
      .setValue(1)
      .bringToFront()
      .setLock(false)
@@ -74,6 +79,7 @@ void setup() {
          updatePlaybackInterval();
          println("Speed changed to: " + speedValue);
        }
+       updateFrameDisplayInterval();  // Adjust frame interval for GIF playback
      });
 }
 
@@ -81,18 +87,24 @@ void updatePlaybackInterval() {
   playbackInterval = (int)(sample.length() / speedValue);
 }
 
+void updateFrameDisplayInterval() {
+  // Adjust frame interval inversely with speedValue
+  int baseInterval = 100; // Base interval in milliseconds for normal speed
+  frameDisplayInterval = (int)(baseInterval / speedValue); // Scale interval based on speed
+}
+
 void draw() {
   background(255);
 
-  if (state == 1) {  // Show record button
+  if (state == 1) {  
     cp5.getController("recordButton").setVisible(true);
-  } else if (state == 2) {  // Countdown and recording status
+  } else if (state == 2) {  
     if (!recording) {
       println("Recording started...");
       startRecording();
     }
     
-    if (millis() - lastCountdownTime >= 1000) {  // Update every second
+    if (millis() - lastCountdownTime >= 1000) {  
       countdown--;
       lastCountdownTime = millis();
     }
@@ -103,19 +115,24 @@ void draw() {
     text("Recording in progress: " + countdown, width/2, height/2 - 50);
     cp5.getController("recordButton").setLabel("Recording");
 
-    if (countdown <= 0 && recording) { // When countdown reaches zero, stop recording
+    if (countdown <= 0 && recording) {
       println("Recording stopped.");
       stopRecording();
       delay(500);
       checkAudioFile();
       state = 3;
     }
-  } else if (state == 3) {  // Finished recording
+  } else if (state == 3) {  
     fill(0);
     text("Finished recording", width/2, height/2 - 50);
     cp5.getController("recordButton").setLabel("Next");
-  } else if (state == 4) {  // Display GIF, show sliders, and play recorded audio
-    image(gifCat, width/2 - gifCat.width/2, height/2 - gifCat.height/2);
+  } else if (state == 4) {  
+    // Display the current frame of the GIF with controlled timing
+    if (millis() - lastFrameTime >= frameDisplayInterval) {
+      currentFrame = (currentFrame + 1) % numFrames;  // Loop through frames
+      lastFrameTime = millis();
+    }
+    image(gifFrames[currentFrame], width/2 - gifFrames[currentFrame].width/2, height/2 - gifFrames[currentFrame].height/2);
 
     if (sample != null) {
       int elapsedTime = millis() - sampleStartTime;
@@ -130,13 +147,11 @@ void draw() {
   }
 }
 
-// Function to start recording
 void startRecording() {
   recording = true;
   recorder.beginRecord();
 }
 
-// Function to stop recording and save audio
 void stopRecording() {
   recording = false;
   recorder.endRecord();
@@ -173,6 +188,7 @@ void recordButton() {
     sample.trigger();
     sample.setGain(volumeValue);
     updatePlaybackInterval();
+    updateFrameDisplayInterval();  // Set initial frame display interval based on speed
     sampleStartTime = millis();
   }
 }
