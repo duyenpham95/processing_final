@@ -1,3 +1,5 @@
+// *********** Dancing cat with light audio effect ***********
+// Student ID: 25073709
 import controlP5.*;
 import ddf.minim.*;
 import java.io.File;
@@ -19,6 +21,7 @@ float[] audioDataLeft;
 float[] audioDataRight;
 
 ControlP5 cp5;
+float initVolume = 25;
 float volumeValue = 0;
 float speedValue = 1;
 
@@ -63,15 +66,18 @@ void setup() {
   cp5.addSlider("volume")
      .setPosition(width - 150, 20)
      .setSize(110, 20)
-     .setRange(-100, 100)
-     .setValue(0)
+     .setRange(0, 100)
+     .setValue(initVolume)
      .bringToFront()
      .setLock(false)
      .onChange(e -> {
        volumeValue = e.getController().getValue();
+     
+       float gain = map(volumeValue, 0, 100, -25, 100);
+       
        if (sample != null) {
-         sample.setGain(volumeValue);
-         println("Volume changed to: " + volumeValue);
+         sample.setGain(gain); // Apply mapped gain to audio sample
+         println("Volume changed to: " + volumeValue + " (Gain: " + gain + " dB)");
        }
      });
 
@@ -127,7 +133,7 @@ void draw() {
       lastCountdownTime = millis();
     }
     
-    fill(0);
+    fill(255);
     textAlign(CENTER, CENTER);
     textSize(24);
     text("Recording in progress: " + countdown, width/2, height/2 - 50);
@@ -142,16 +148,10 @@ void draw() {
       state = 3;
     }
   } else if (state == 3) {  
-    fill(0);
+    fill(255);
     text("Finished recording", width/2, height/2 - 50);
     cp5.getController("recordButton").setLabel("Next");
   } else if (state == 4) {  
-    if (millis() - lastFrameTime >= frameDisplayInterval) {
-      currentFrame = (currentFrame + 1) % numFrames;
-      lastFrameTime = millis();
-    }
-    image(gifFrames[currentFrame], width/2 - gifFrames[currentFrame].width/2, height/2 - gifFrames[currentFrame].height/2);
-
     if (sample != null) {
       int elapsedTime = millis() - sampleStartTime;
       if (elapsedTime >= playbackInterval) {
@@ -167,6 +167,13 @@ void draw() {
     if (dataReady) {
       drawCirclesBasedOnAudioData();
     }
+
+    // Draw the GIF as the top layer
+    if (millis() - lastFrameTime >= frameDisplayInterval) {
+      currentFrame = (currentFrame + 1) % numFrames;
+      lastFrameTime = millis();
+    }
+    image(gifFrames[currentFrame], width/2 - gifFrames[currentFrame].width/2, height/2 - gifFrames[currentFrame].height/2);
   }
 }
 
@@ -185,7 +192,6 @@ void captureAudioDataDirectly() {
     
     float[] numericDataFromAudio = calculateSampleData(audioDataLeft);
     
-    println("Average ----" );
     for (int i = 0; i < 32; i++) {
       print(" ", numericDataFromAudio[i]);
     }
@@ -200,8 +206,8 @@ void drawCirclesBasedOnAudioData() {
   // Calculate flashing interval based on speed
   int flashInterval = (int) map(speedValue, 0.1, 5, 1000, 100);  // Faster flashes with higher speed
   
-  // Determine visibility based on flash interval
-  boolean isVisible = (millis() % flashInterval) < flashInterval / 2;
+  // Determine visibility of stroke based on flash interval
+  boolean showStroke = (millis() % flashInterval) < flashInterval / 2;
 
   for (int i = 0; i < averagedData.length; i++) {
     // Map the averaged values to the range 5 to 50 for base radius
@@ -214,14 +220,18 @@ void drawCirclesBasedOnAudioData() {
     float x = circlePositions[i].x;
     float y = circlePositions[i].y;
 
-    // Only draw circle if visibility is true (flashing effect)
-    if (isVisible) {
-      fill(circleColors[i]);  // Fixed random color with opacity 75
+    // Draw circle fill
+    fill(circleColors[i]);  // Fixed random color with opacity 75
+    noStroke();  // Ensure fill is always drawn without stroke
+
+    // Draw the circle with adjusted radius
+    ellipse(x, y, adjustedRadius * 2, adjustedRadius * 2);  // radius * 2 since ellipse uses diameter
+
+    // Conditionally add a flashing stroke
+    if (showStroke) {
       stroke(255, 255, 255, 50);  // White stroke with low opacity for a soft blur effect
       strokeWeight(6);             // Increase stroke weight for a blur-like appearance
-
-      // Draw the circle with adjusted radius
-      ellipse(x, y, adjustedRadius * 2, adjustedRadius * 2);  // radius * 2 since ellipse uses diameter
+      ellipse(x, y, adjustedRadius * 2, adjustedRadius * 2);  // Stroke only
     }
   }
 }
@@ -259,7 +269,7 @@ void stopRecording() {
     recorder.endRecord();
     recorder.save();
 
-    delay(5000);  // Ensure enough time for saving
+    delay(1000);  // Ensure enough time for saving
 
     // Load the audio sample for playback
     sample = minim.loadSample(recordedFilePath, 512);
@@ -275,7 +285,7 @@ void recordButton() {
     state = 4;
     cp5.getController("recordButton").setPosition(-200, -200);
 
-    cp5.getController("volume").setValue(0);
+    cp5.getController("volume").setValue(initVolume);
     cp5.getController("speed").setValue(1);
 
     sample.trigger();
