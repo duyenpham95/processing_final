@@ -168,8 +168,6 @@ void draw() {
       drawCirclesBasedOnAudioData();
     }
   }
-
-  
 }
 
 // Direct data capture from input buffers
@@ -198,21 +196,33 @@ void captureAudioDataDirectly() {
 
 void drawCirclesBasedOnAudioData() {
   float[] averagedData = calculateSampleData(audioDataLeft);
+  
+  // Calculate flashing interval based on speed
+  int flashInterval = (int) map(speedValue, 0.1, 5, 1000, 100);  // Faster flashes with higher speed
+  
+  // Determine visibility based on flash interval
+  boolean isVisible = (millis() % flashInterval) < flashInterval / 2;
+
   for (int i = 0; i < averagedData.length; i++) {
-    // Map the averaged values to the range 5 to 50 for the radius
-    float radius = map(averagedData[i], min(averagedData), max(averagedData), 5, 50);
+    // Map the averaged values to the range 5 to 50 for base radius
+    float baseRadius = map(averagedData[i], min(averagedData), max(averagedData), 5, 50);
+    
+    // Adjust radius based on volume
+    float adjustedRadius = baseRadius * map(volumeValue, -100, 100, 0.5, 1.5);  // Increase/decrease radius with volume
     
     // Use fixed positions from circlePositions array
     float x = circlePositions[i].x;
     float y = circlePositions[i].y;
 
-    // Use the pre-generated color for each circle
-    fill(circleColors[i]);  // Fixed random color with opacity 75
-    stroke(255, 255, 255, 50);  // White stroke with low opacity for a soft blur effect
-    strokeWeight(6);             // Increase stroke weight for a blur-like appearance
+    // Only draw circle if visibility is true (flashing effect)
+    if (isVisible) {
+      fill(circleColors[i]);  // Fixed random color with opacity 75
+      stroke(255, 255, 255, 50);  // White stroke with low opacity for a soft blur effect
+      strokeWeight(6);             // Increase stroke weight for a blur-like appearance
 
-    // Draw the circle
-    ellipse(x, y, radius * 2, radius * 2);  // radius * 2 since ellipse uses diameter
+      // Draw the circle with adjusted radius
+      ellipse(x, y, adjustedRadius * 2, adjustedRadius * 2);  // radius * 2 since ellipse uses diameter
+    }
   }
 }
 
